@@ -59,7 +59,7 @@ module NWRFC
     raise NWError, error_handle \
       if error_handle[:code] > 0
     #raise "Error code #{error_handle[:code]} group #{error_handle[:group]} message #{error_handle[:message].get_str}" \
-      
+
   end
 
   # Represents a client connection to a SAP system that can be used to invoke
@@ -71,6 +71,7 @@ module NWRFC
     # (described in the NW RFC SDK document), passed in the form of a Hash, e.g.
     #   Connection.new { 'ashost' :=> 'ajax.domain.com', ... }
     def initialize(conn_params)
+      Rails.logger.info "NWRFC#open_connection" if defined?(Rails)
       conn_params.untaint #For params loaded from file, e.g.
       raise "Connection parameters must be a Hash" unless conn_params.instance_of? Hash
       @cparams = NWRFC.make_conn_params(conn_params)
@@ -93,6 +94,7 @@ module NWRFC
     # Get the description of a given function module from the system to which we are connected
     # @return [Function] function module description
     def get_function(function_name)
+      Rails.logger.info "NWRFC#get_function(#{function_name})" if defined?(Rails)
       Function.new(self, function_name)
     end
 
@@ -169,10 +171,10 @@ module NWRFC
     #@todo For certain types, e.g. :RFCTYPE_BCD, a length specification is
     #  required, otherwise a segfault is the result later down the line.
     #  Find and implement all the types where this is required
-    def initialize(*args)  
+    def initialize(*args)
 
       attr = args[0]
-      
+
 
 
       raise "RFCTYPE_BCD requires a length" if attr[:type] == :RFCTYPE_BCD && !(attr[:length])
@@ -193,7 +195,7 @@ module NWRFC
   end
 
   class Type
-    
+
   end
 
   # Represents a remote-enabled function module for RFC, can be instantiated either by the caller
@@ -312,6 +314,7 @@ module NWRFC
     # Execute the function on the connected ABAP system
     #@raise NWRFC::NWError
     def invoke(tx = nil)
+      Rails.logger.info "NWRFC#invoke" if defined?(Rails)
       raise "Not a callable function" unless @connection
       if tx
         rc = NWRFCLib.invoke_in_transaction(tx.handle, @handle, @error.to_ptr)
@@ -420,7 +423,7 @@ module NWRFC
   class Structure < DataContainer
 
 
-    
+
   end # class Structure
 
 end #module NWRFC
