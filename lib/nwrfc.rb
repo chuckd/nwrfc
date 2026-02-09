@@ -72,7 +72,6 @@ module NWRFC
     #   Connection.new { 'ashost' :=> 'ajax.domain.com', ... }
     def initialize(conn_params)
       Rails.logger.info "NWRFC#open_connection" if defined?(Rails)
-      conn_params.untaint #For params loaded from file, e.g.
       raise "Connection parameters must be a Hash" unless conn_params.instance_of? Hash
       @cparams = NWRFC.make_conn_params(conn_params)
       raise "Could not create valid pointer from parameters" unless @cparams.instance_of? FFI::MemoryPointer
