@@ -7,7 +7,6 @@ Gem::Specification.new do |s|
   s.authors     = ["Martin Ceronio"]
   s.email       = 'mydoghasworms@gmail.com'
   s.homepage    = 'http://rubygems.org/gems/nwrfc'
-  s.has_rdoc    = true
   s.add_dependency('ffi', '>= 1.9.3')
   s.extra_rdoc_files = ['README.rdoc']
   s.files = %w(README.rdoc Rakefile) + Dir.glob("{bin,lib,spec}/**/*")
