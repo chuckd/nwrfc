@@ -54,7 +54,8 @@ module NWRFC
           buf = FFI::MemoryPointer.new(:uchar, size*2)
           rc = NWRFCLib.get_chars(@handle, metadata[:name].cU, buf, size, @error.to_ptr)
           NWRFC.check_error(@error) if rc > 0
-          return BigDecimal(buf.get_bytes(0, size*2).uC)
+          str = buf.get_bytes(0, size*2).uC.strip
+          return str.empty? ? BigDecimal(0) : BigDecimal(str)
 
         when :RFCTYPE_TIME
           # TODO: See whether we can optimize this
