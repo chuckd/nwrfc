@@ -35,8 +35,10 @@ module NWRFC
 
     # Disconnect from the server
     def disconnect
-      NWRFCLib.close_connection(@handle, @error)
-      NWRFC.check_error(@error)
+      return unless @handle
+      rc = NWRFCLib.close_connection(@handle, @error)
+      NWRFC.check_error(@error) if rc > 0
+      @handle = nil
     end
 
     alias :close :disconnect

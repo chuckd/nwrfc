@@ -41,13 +41,53 @@ Connecting to the SAP system:
 Calling a function:
 
   f = c.get_function("STFC_STRUCTURE") #Obtain description of a function module
+  f.with_function_call do |fc|
+    fc.invoke
+  end
+
+Or close the function call explicitly. Closing it also releases all nested table and structure data:
+
   fc = f.get_function_call
-  f.invoke
+  begin
+    fc.invoke
+  ensure
+    fc.close
+  end
+
+Function descriptions fetched through a connection are cached and borrowed from the SDK, so +f.close+
+never destroys them. A locally defined function owns its description and should be closed after all calls
+created from it have been closed:
+
+  local_function = Function.new("MY_FUNCTION")
+  begin
+    # add parameters and use local_function
+  ensure
+    local_function.close
+  end
+
+Transactions retain their handle when submit or confirm fails so +commit+ can retry the appropriate step.
+Close an abandoned transaction explicitly; +close+ and +destroy+ are idempotent:
+
+  transaction = c.start_transaction
+  begin
+    fc.invoke(transaction)
+    transaction.commit
+  ensure
+    transaction.close
+  end
+
+Connections and servers also have idempotent +close+ methods. Function calls received by server callbacks,
+and table or structure handles obtained from a function call, are borrowed and are never destroyed directly.
 
 Setting and getting parameters and fields:
 
   import_struc = fc[:IMPORTSTRUC]
   import_struc[:RFCCHAR1] = 'a'
+
+Close function calls before their connection:
+
+  fc.close
+  c.close
 
 == Installation
 

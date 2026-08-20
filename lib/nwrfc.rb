@@ -81,13 +81,12 @@ module NWRFC
       self
     end
 
-    # Call the NW RFC SDK's RfcCloseConnection() function with the current
-    # connection; this *should* invalidate the connection handle
-    # and cause an error on any subsequent use of this connection
-    #@todo Write test to check that handle is invalidated and causes subsequent calls to fail
+    # Close the current connection and clear its handle after successful cleanup.
     def disconnect
-      NWRFCLib.close_connection(@handle, @error.to_ptr)
-      NWRFC.check_error(@error)
+      return unless @handle
+      rc = NWRFCLib.close_connection(@handle, @error.to_ptr)
+      NWRFC.check_error(@error) if rc > 0
+      @handle = nil
     end
 
     # Get the description of a given function module from the system to which we are connected
@@ -130,18 +129,33 @@ module NWRFC
     def initialize(handle)
       @handle = handle
       @error =  NWRFCLib::RFCError.new
+      @submitted = false
+      @confirmed = false
     end
 
     def commit
-      rc = NWRFCLib.submit_transaction(@handle, @error)
-      NWRFC.check_error(@error) if rc > 0
-      rc = NWRFCLib.confirm_transaction(@handle, @error)
-      NWRFC.check_error(@error) if rc > 0
+      unless @submitted
+        rc = NWRFCLib.submit_transaction(@handle, @error)
+        NWRFC.check_error(@error) if rc > 0
+        @submitted = true
+      end
+      unless @confirmed
+        rc = NWRFCLib.confirm_transaction(@handle, @error)
+        NWRFC.check_error(@error) if rc > 0
+        @confirmed = true
+      end
+      close
+    end
+
+    def close
+      return unless @handle
       rc = NWRFCLib.destroy_transaction(@handle, @error)
       NWRFC.check_error(@error) if rc > 0
+      @handle = nil
     end
 
     alias :submit :commit
+    alias :destroy :close
 
   end
 
@@ -220,16 +234,19 @@ module NWRFC
     def initialize(*args)#(connection, function_name)
       raise("Must initialize function with 1 or 2 arguments") if args.size != 1 && args.size != 2
       @error =  NWRFCLib::RFCError.new
+      @active_function_calls = 0
       if args.size == 2
         @function_name = args[1] #function_name
         @desc = NWRFCLib.get_function_desc(args[0].handle, args[1].cU, @error.to_ptr)
         NWRFC.check_error(@error)
         @connection = args[0]
+        @owns_desc = false
       else
         @function_name = args[0] #function_name
         @desc = NWRFCLib::create_function_desc(args[0].cU, @error)
         NWRFC.check_error(@error)
         @connection = nil
+        @owns_desc = true
       end
     end
 
@@ -245,6 +262,29 @@ module NWRFC
     def get_function_call
       FunctionCall.new(self)
     end
+
+    # Yield a function call and release its container, including nested data,
+    # even when the block raises.
+    def with_function_call
+      function_call = get_function_call
+      begin
+        yield function_call
+      ensure
+        function_call.close
+      end
+    end
+
+    def close
+      return unless @desc
+      if @owns_desc
+        raise "Cannot close function description while function calls are active" if @active_function_calls > 0
+        rc = NWRFCLib.destroy_function_desc(@desc, @error)
+        NWRFC.check_error(@error) if rc > 0
+      end
+      @desc = nil
+    end
+
+    alias :destroy :close
 
     # Get the number of parameters this function has
     def parameter_count
@@ -274,6 +314,16 @@ module NWRFC
       end
     end
 
+    protected
+
+    def function_call_opened
+      @active_function_calls += 1
+    end
+
+    def function_call_closed
+      @active_function_calls -= 1
+    end
+
   end
 
   # Represents a callable instance of a function
@@ -292,8 +342,9 @@ module NWRFC
     #   @param [FFI::Pointer] function_handle Pointer to the function handle (RFC_FUNCTION_HANDLE)
     def initialize(*args)
       @error = NWRFCLib::RFCError.new
-      if args[0].class == FFI::Pointer
+      if args[0].kind_of?(FFI::Pointer)
         @handle = args[0]
+        @owns_handle = false
         @connection = nil
         @function = nil
         # @connection = args[0].connection
@@ -301,14 +352,30 @@ module NWRFC
         #@todo Investigate having a referenced Function object as well in the server case; does it have practical applications?
         #  Doing this would require an extra way of handling the constructor of Function
         # @function = Function.new
-      elsif args[0].class == Function
+      elsif args[0].kind_of?(Function)
         @function = args[0] #function
+        @owns_handle = true
         @connection = args[0].connection
         @handle = NWRFCLib.create_function(@function.desc, @error.to_ptr)
         @desc = args[0].desc
       end
       NWRFC.check_error(@error)
+      @function.send(:function_call_opened) if @function
     end
+
+    def close
+      return unless @handle
+      if @owns_handle
+        rc = NWRFCLib.destroy_function(@handle, @error.to_ptr)
+        NWRFC.check_error(@error) if rc > 0
+      end
+      @handle = nil
+      @desc = nil
+      @function.send(:function_call_closed) if @function
+      @function = nil
+    end
+
+    alias :destroy :close
 
     # Execute the function on the connected ABAP system
     #@raise NWRFC::NWError
